@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ウサみくじ（くじ引きボタンでBGM再生）</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      background: url('cute-background.png') repeat;
+      margin: 0;
+      padding: 40px;
+    }
+    .wrapper {
+      background: rgba(255,255,255,0.8);
+      padding: 20px;
+      border-radius: 12px;
+      display: inline-block;
+    }
+    h1 { margin-bottom: 20px; }
+    .reel {
+      width: 300px; height: 300px;
+      margin: 0 auto 20px;
+      border: 3px solid #333; border-radius: 8px;
+      overflow: hidden; background: #fff;
+      position: relative;
+    }
+    .symbols { position: absolute; top: 0; left: 0; transition: top 0.1s ease-out; }
+    .symbol { width: 300px; height: 300px; }
+    .symbol img { width:100%; height:100%; object-fit:contain; }
+    button {
+      padding:8px 16px; margin:0 5px;
+      font-size:16px; border:none; border-radius:4px;
+      cursor:pointer;
+    }
+    #startBtn { background:#28a745; color:#fff; }
+    #stopBtn  { background:#dc3545; color:#fff; }
+    button:disabled { background:#aaa; cursor:not-allowed; }
+    #result { margin-top:20px; font-size:18px; font-weight:bold; }
+    #comment { margin-top:10px; font-size:16px; color:#333; white-space:pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <h1>ウサウサみくじ</h1>
+    <div class="reel"><div id="symbols" class="symbols"></div></div>
+    <div>
+      <button id="startBtn">くじ引き</button>
+      <button id="stopBtn" disabled>止める</button>
+    </div>
+    <div id="result"></div>
+    <div id="comment"></div>
+  </div>
+
+  <!-- BGM（autoplayは外す） -->
+  <audio id="bgm" src="bgm.mp3" loop></audio>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const fortunes = ['大吉','中吉','吉','小吉','末吉','凶'];
+      const weights  = [2,5,5,5,5,1];
+      const images2d = [
+        ['daikichi1.png','daikichi2.png'],
+        ['chuukichi1.png','chuukichi2.png'],
+        ['kichi1.png','kichi2.png'],
+        ['shoukichi1.png','shoukichi2.png'],
+        ['suekichi1.png','suekichi2.png'],
+        ['kyou1.png','kyou2.png']
+      ];
+      const comments = [
+        '大吉　最高にhappy！ウサウサ素敵なイースターの１日を！ウサーー！　ラッキーアイテム：うさぎ',
+        '中吉　なんとなくいい感じのウサ！幸運のうさぎが訪れるウサ！　ラッキーアイテム：うさぎ',
+        '吉　　真ん中。ちょうどいい感じの幸せウサね！　ラッキーアイテム：うさぎ',
+        '小吉　小さい幸せがやってくる日ウサ！良く見るとほら、そこに！ラッキーアイテム：うさぎ',
+        '末吉　ギリギリ幸せウサ！残り物に福があるウサね！　ラッキーアイテム：うさぎ',
+        '凶　　そもそも幸せなイースターに不幸はないウサね！のんびりするうさ！　ラッキーアイテム：うさぎ'
+      ];
+
+      const flatImages = images2d.flat();
+      const spinSpeed  = 80;
+      const symH       = 300;
+      const count      = flatImages.length;
+      const totalH     = symH * count;
+
+      const symEl    = document.getElementById('symbols');
+      const startBtn = document.getElementById('startBtn');
+      const stopBtn  = document.getElementById('stopBtn');
+      const resultEl = document.getElementById('result');
+      const cmtEl    = document.getElementById('comment');
+      const bgm      = document.getElementById('bgm');
+
+      let interval, targetFlatIndex;
+
+      function posMod(n,m){return ((n%m)+m)%m;}
+      function pickCategory(){
+        const sum = weights.reduce((a,b)=>a+b,0);
+        let r = Math.random()*sum;
+        for(let i=0;i<weights.length;i++){
+          if(r<weights[i])return i;
+          r-=weights[i];
+        }
+        return fortunes.length-1;
+      }
+
+      // リールに2周分セット
+      symEl.innerHTML = flatImages.concat(flatImages)
+        .map(src=>`<div class="symbol"><img src="${src}"></div>`).join('');
+
+      startBtn.addEventListener('click',()=>{
+        // ユーザー操作でBGM再生
+        bgm.play().catch(()=>{});
+        resultEl.textContent='';
+        cmtEl.textContent='';
+        const cat  = pickCategory();
+        const varI = Math.floor(Math.random()*images2d[cat].length);
+        targetFlatIndex = cat*images2d[cat].length + varI;
+        let pos=0;
+        interval = setInterval(()=>{
+          pos=(pos+symH)%(totalH*2);
+          symEl.style.top=`-${pos}px`;
+        },spinSpeed);
+        startBtn.disabled=true;
+        stopBtn.disabled=false;
+      });
+
+      stopBtn.addEventListener('click',()=>{
+        clearInterval(interval);
+        stopBtn.disabled=true;
+        let pos=parseInt(symEl.style.top)||0;
+        const tgt=targetFlatIndex*symH;
+        const dist=(tgt-posMod(pos,totalH)+totalH)%totalH;
+        const steps=dist/symH;
+        let cnt=0;
+        const anim=setInterval(()=>{
+          pos=(pos+symH)%(totalH*2);
+          symEl.style.top=`-${pos}px`;
+          if(++cnt>=steps){
+            clearInterval(anim);
+            symEl.style.top=`-${targetFlatIndex*symH}px`;
+            const idx=Math.floor(targetFlatIndex/images2d[0].length);
+            resultEl.textContent=fortunes[idx];
+            cmtEl.textContent=comments[idx];
+            startBtn.disabled=false;
+          }
+        },spinSpeed);
+      });
+    });
+  </script>
+</body>
+</html>
